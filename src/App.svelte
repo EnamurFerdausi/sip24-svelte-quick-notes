@@ -1,54 +1,62 @@
-<script lang="ts">
-  import { onMount } from 'svelte';
+<script>
+  import { onMount } from "svelte";
+  import db from "./database"; // Import dexie database form db.js
 
-  let pages = [];
-  let currentPageIndex = 0;
-  let title = "";
-  let note = "";
+  let pages = []; 
+  let currentPageIndex = 0; 
+  let title = ""; 
+  let note = ""; 
 
-  onMount(() => {
-    const savedPages = localStorage.getItem("pages");
-    if (savedPages) {
-      pages = JSON.parse(savedPages);
-      title = pages[currentPageIndex];
-      note = localStorage.getItem(title) || "";
+  // Function to run when the component is mounted
+  onMount(async () => {
+    // @ts-ignore
+    pages = await db.notes.toArray(); // load all the page from db
+    if (pages.length > 0) {
+      selectPage(0); // first page will be selected if no page exiest
     } else {
-      addPage();
+      addPage(); // Add new page if no page exited in the first palace 
     }
   });
 
-  function saveNote() {
-    const storedPageName = pages[currentPageIndex];
-    if (storedPageName !== title) { 
-      localStorage.removeItem(storedPageName);
-      pages[currentPageIndex] = title;
+  // To dave current note 
+  async function saveNote() {
+    const storedPage = pages[currentPageIndex];
+    if (storedPage.title !== title) {
+      await db.notes.delete(storedPage.id);
+      pages[currentPageIndex].title = title;
     }
-    localStorage.setItem(title, note);
-    localStorage.setItem('pages', JSON.stringify(pages));
+    await db.notes.put({ id: storedPage.id, title, content: note });
+    pages = await db.notes.toArray();
   }
 
-  function addPage() {
-    pages = [...pages, "New Page"];
-    selectPage(pages.length - 1);
+  // For adding new pages
+  async function addPage() {
+    const newPage = { title: "New Page", content: "" };
+    const id = await db.notes.add(newPage);
+    newPage.id = id;
+    pages.push(newPage);
+    selectPage(pages.length - 1); // Select the newly added page
   }
 
+  // Function to select a page by index
   function selectPage(index) {
     currentPageIndex = index;
-    title = pages[currentPageIndex];
-    note = localStorage.getItem(title) || "";
+    title = pages[currentPageIndex].title;
+    note = pages[currentPageIndex].content;
   }
 
-  function deletePage(index) {
-    const pageToDelete = pages[index];
-    localStorage.removeItem(pageToDelete);
-    pages = pages.filter((_, i) => i !== index);
+  // Function to delete the current page
+  async function deletePage() {
+    const pageToDelete = pages[currentPageIndex];
+    await db.notes.delete(pageToDelete.id);
+    pages = pages.filter((page) => page.id !== pageToDelete.id);
     if (pages.length === 0) {
       addPage();
     } else {
-      selectPage(index === 0 ? 0 : index - 1);
+      selectPage(currentPageIndex > 0 ? currentPageIndex - 1 : 0);
     }
-    localStorage.setItem('pages', JSON.stringify(pages));
   }
+
 </script>
 
 <aside class="fixed top-0 left-0 z-40 w-60 h-screen">
@@ -59,8 +67,8 @@
       </li>
       {#each pages as page, index}
         <div class="flex justify-between items-center">
-          <li><button on:click={() => selectPage(index)}>{page}</button></li>
-          <button on:click={() => deletePage(index)} class="text-red-500 ml-2 bg-red-500 text-white px-2 rounded-full pb-1 hover:bg-red-900">X</button>
+          <li><button on:click={() => selectPage(index)}>{page.title}</button></li>
+          <button on:click={() => deletePage()} class="text-red-500 ml-2 bg-red-500 text-white px-2 rounded-full pb-1 hover:bg-red-900">X</button>
         </div>
       {/each}
     </ul>
